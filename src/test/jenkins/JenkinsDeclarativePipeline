@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+    parameters{
+        choice(name: "ChooseBrowser", description: "Choose Browser to Run Tests", choices:["Chrome", "Firefox", "Edge"])
+        extendedChoice(description: 'Choose Features to Smoke Test', multiSelectDelimiter: ',', name: 'SmokeTests', quoteValue: false, saveJSONParameterToFile: false, type: 'PT_CHECKBOX', value: "All, Login, PIM - Add Employee", visibleItemCount: 2)
+        text(name: "SendReportEmails", description: "Write Emails seperated by ',' to send reports", defaultValue: "binayaksadhukhan@gmail.com")
+
+    }
+    tools {
+        maven 'Maven3'
+    }
+    stages {
+        stage("Cloning Test Code") {
+           steps{
+                git branch: 'main', url: 'https://github.com/binayak12/TestOrangeHRM.git'
+           }
+        }
+        stage('Reading Your Choices') {
+            when {
+                expression{params.SmokeTests.split(',')[0]!=""}
+            }
+            stages {
+                stage("Login") {
+                    when{
+                        expression{params.SmokeTests.contains("Login") || params.SmokeTests.contains("All")}
+                    }
+                    steps{
+                       bat 'mvn -Dbrowser=${params.ChooseBrowser} -DrunnerFile=Login_Smoke clean install'
+                    }
+
+                }
+                stage("PIM - Add Employee") {
+                    when{
+                        expression{params.SmokeTests.contains("PIM - Add Employee") || params.SmokeTests.contains("All")}
+                    }
+                    steps{
+                        bat 'mvn -Dbrowser=${params.ChooseBrowser} -DrunnerFile=PIM/AddEmployee_Smoke clean install'
+                    }
+
+                }
+
+            }
+        }
+    }
+    post {
+        failure {
+           emailext attachLog: true, body: 'Test Successful', subject: 'Hi', to: 'binayaksadhukhan@gmail.com'
+        }
+         success {
+               emailext attachmentsPattern: 'test.zip', body: '''${SCRIPT, template="groovy-html.template"}''',
+                    subject: "${env.JOB_NAME} - Build # ${env.BUILD_NUMBER} - Successful",
+                    mimeType: 'text/html',to: "binayaksadhukhan@gmail.com"
+          }
+    }
+
+}
